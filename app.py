@@ -11,7 +11,7 @@ API_KEY = "AIzaSyD73w8UN8RVNIPwTkqnRQfKNN37kDHJT7g"
 if API_KEY != "YOUR_API_KEY":
     genai.configure(api_key=API_KEY)
     # Using flash for fast, dynamic generation
-    model = genai.GenerativeModel('gemini-pro') 
+    model = genai.GenerativeModel('models/gemini-pro') 
 else:
     model = None
 
