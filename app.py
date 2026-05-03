@@ -8,7 +8,6 @@ import plotly.express as px
 # 1. API Configuration
 # ==========================================
 try:
-    # Pulls the key from Streamlit Cloud Secrets
     client = Groq(api_key=st.secrets["GROQ_API_KEY"])
     AI_MODEL = "llama-3.3-70b-versatile" 
 except Exception:
@@ -96,7 +95,10 @@ if st.session_state.stage == 'selection':
 # --- STAGE 2: Profile Load ---
 elif st.session_state.stage == 'loading_profile':
     with st.spinner(f"Fetching data for {st.session_state.selected_animal_name}..."):
-        prompt = f"Return ONLY raw JSON for the endangered {st.session_state.selected_animal_name} in the US with keys: 'description', 'history', 'survival_data', 'endangerment_reasons', 'habitat', 'issues' (list of 3)."
+        # UPDATED PROMPT: Added instruction to return only plain strings for data
+        prompt = f"""Return ONLY raw JSON for the endangered {st.session_state.selected_animal_name} in the US.
+        All values must be simple descriptive string sentences. 
+        Keys: 'description', 'history', 'survival_data', 'endangerment_reasons', 'habitat', 'issues' (list of 3 strings)."""
         try:
             response = client.chat.completions.create(
                 model=AI_MODEL,
@@ -116,11 +118,18 @@ elif st.session_state.stage == 'loading_profile':
 elif st.session_state.stage == 'details':
     p = st.session_state.animal_profile
     st.header(st.session_state.selected_animal_name)
-    st.write(f"**Description:** {p['description']}")
-    st.write(f"**History:** {p['history']}")
-    st.write(f"**Habitat:** {p['habitat']}")
-    st.write(f"**Survival Skills:** {p['survival_data']}")
-    st.write(f"**Threats:** {p['endangerment_reasons']}")
+    
+    # NEW CLEANUP LOGIC: Checks if the AI sent a dictionary and converts it to clean text
+    def clean_text(data):
+        if isinstance(data, dict):
+            return ", ".join([f"{k.replace('_', ' ').title()}: {v}" for k, v in data.items()])
+        return data
+
+    st.write(f"**Description:** {clean_text(p['description'])}")
+    st.write(f"**History:** {clean_text(p['history'])}")
+    st.write(f"**Habitat:** {clean_text(p['habitat'])}")
+    st.write(f"**Survival Skills:** {clean_text(p['survival_data'])}")
+    st.write(f"**Threats:** {clean_text(p['endangerment_reasons'])}")
     
     st.error("### ⚠️ Main Survival Issues")
     for i, issue in enumerate(p['issues'], 1):
@@ -143,7 +152,6 @@ elif st.session_state.stage == 'action':
     st.header("Action Plan")
     issue = st.radio("Choose an issue to solve:", p['issues'])
     
-    # Corrected text_area line
     user_idea = st.text_area("What can be done to help solve this issue?", placeholder="Type your idea...")
     
     if st.button("Submit Idea"):
