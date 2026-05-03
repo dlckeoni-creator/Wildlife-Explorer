@@ -1,24 +1,25 @@
 import streamlit as st
 import google.generativeai as genai
 import json
+import pandas as pd
+import plotly.express as px
 
 # ==========================================
 # 1. API Configuration
 # ==========================================
-# Replace with your actual key or use st.secrets["API_KEY"] if deploying to Streamlit Cloud
-API_KEY = "AIzaSyD73w8UN8RVNIPwTkqnRQfKNN37kDHJT7g" 
+# Replace with your actual key (Keep this secure!)
+API_KEY = "YOUR_API_KEY" 
 
 if API_KEY != "YOUR_API_KEY":
     genai.configure(api_key=API_KEY)
-    # Using flash for fast, dynamic generation
-    model = genai.GenerativeModel('models/gemini-pro') 
+    # Using 1.5-flash as the standard fast model
+    model = genai.GenerativeModel('models/gemini-1.5-flash') 
 else:
     model = None
 
 # ==========================================
 # 2. Session State Management
 # ==========================================
-# This prevents the app from forgetting data when the user clicks a button
 if 'stage' not in st.session_state:
     st.session_state.stage = 'selection'
 if 'animal_list' not in st.session_state:
@@ -27,76 +28,117 @@ if 'selected_animal_name' not in st.session_state:
     st.session_state.selected_animal_name = None
 if 'animal_profile' not in st.session_state:
     st.session_state.animal_profile = None
+if 'chosen_region' not in st.session_state:
+    st.session_state.chosen_region = "West"
+if 'chosen_class' not in st.session_state:
+    st.session_state.chosen_class = "Mammals"
 
 def set_stage(stage):
     st.session_state.stage = stage
 
 # ==========================================
-# 3. App UI & Logic
+# 3. Map Generation Function
 # ==========================================
-st.set_page_config(page_title="Wildlife Conservation Explorer", page_icon="🐾", layout="centered")
+def draw_region_map():
+    # Define the 4 regions and their states
+    state_mapping = {
+        'WA':'West', 'OR':'West', 'CA':'West', 'NV':'West', 'ID':'West', 'MT':'West', 'WY':'West', 'UT':'West', 'AZ':'West', 'NM':'West', 'CO':'West', 'AK':'West', 'HI':'West',
+        'ND':'Mid-west', 'SD':'Mid-west', 'NE':'Mid-west', 'KS':'Mid-west', 'MN':'Mid-west', 'IA':'Mid-west', 'MO':'Mid-west', 'WI':'Mid-west', 'IL':'Mid-west', 'MI':'Mid-west', 'IN':'Mid-west', 'OH':'Mid-west',
+        'TX':'South', 'OK':'South', 'AR':'South', 'LA':'South', 'MS':'South', 'TN':'South', 'KY':'South', 'AL':'South', 'GA':'South', 'FL':'South', 'SC':'South', 'NC':'South', 'VA':'South', 'WV':'South', 'MD':'South', 'DE':'South',
+        'PA':'Northeast', 'NJ':'Northeast', 'NY':'Northeast', 'CT':'Northeast', 'RI':'Northeast', 'MA':'Northeast', 'VT':'Northeast', 'NH':'Northeast', 'ME':'Northeast'
+    }
+    
+    df = pd.DataFrame(list(state_mapping.items()), columns=['State', 'Region'])
+    
+    # Assign specific colors to regions based on your prompt
+    color_map = {
+        'West': '#3498db',      # Blue
+        'South': '#e74c3c',     # Red
+        'Mid-west': '#f1c40f',  # Yellow
+        'Northeast': '#2ecc71'  # Green
+    }
 
-st.title("🐾 Wildlife Conservation Explorer")
-st.write("Discover endangered species across the United States and brainstorm ways to secure their future.")
+    # Create the choropleth map
+    fig = px.choropleth(
+        df, 
+        locations='State', 
+        locationmode="USA-states", 
+        color='Region',
+        color_discrete_map=color_map,
+        scope="usa",
+        title="US Wildlife Regions"
+    )
+    
+    # Stylize to make it look cleaner and more "cartoon" flat
+    fig.update_layout(
+        geo=dict(showlakes=False, bgcolor='rgba(0,0,0,0)'),
+        margin={"r":0,"t":40,"l":0,"b":0},
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    return fig
+
+# ==========================================
+# 4. App UI & Logic
+# ==========================================
+st.set_page_config(page_title="Endangered Species Awareness", page_icon="🌍", layout="centered")
+
+st.title("🌍 US Endangered Species Explorer")
 st.markdown("---")
 
-# Stop the app if API key is missing
 if model is None:
-    st.error("⚠️ Please add your Gemini API key at the top of the app.py code to activate the AI.")
+    st.error("⚠️ Please add your Gemini API key at the top of the app.py code.")
     st.stop()
 
-# --- STAGE 1: Selection & List Generation ---
+# --- STAGE 1: Visual Map & Selection ---
 if st.session_state.stage == 'selection':
+    # Display the interactive map
+    st.plotly_chart(draw_region_map(), use_container_width=True)
+    
+    st.write("### Select Your Parameters")
     regions = ["West", "South", "Mid-west", "Northeast"]
     classes = ["Mammals", "Birds", "Reptiles", "Amphibians", "Fish", "Invertebrates"]
 
     col1, col2 = st.columns(2)
     with col1:
-        selected_class = st.selectbox("1. Choose an Animal Class:", classes)
+        st.session_state.chosen_region = st.selectbox("1. Choose a Region from the map:", regions)
     with col2:
-        selected_region = st.selectbox("2. Choose a US Region:", regions)
+        st.session_state.chosen_class = st.selectbox("2. Choose an Animal Class:", classes)
 
     if st.button("Generate Top 10 Endangered List"):
-        with st.spinner("AI is researching the region..."):
-            # Prompting the AI to return a clean, comma-separated list
-            prompt = f"List the top 10 most threatened or endangered {selected_class} in the {selected_region}ern United States. Return ONLY a comma-separated list of their common names, nothing else."
+        with st.spinner("AI is analyzing conservation data..."):
+            prompt = f"List the top 10 most threatened or endangered {st.session_state.chosen_class} in the {st.session_state.chosen_region}ern United States. Return ONLY a comma-separated list of their common names, nothing else."
             response = model.generate_content(prompt)
             
-            # Clean up the AI output into a Python list
             clean_list = [name.strip() for name in response.text.split(",") if name.strip()]
             st.session_state.animal_list = clean_list
-            st.success("List generated!")
+            st.success("Data Retrieved!")
 
-    # If the list has been generated, show the next dropdown
+    # Show the list if it has been generated
     if st.session_state.animal_list:
-        st.subheader(f"Endangered {selected_class} in the {selected_region}")
-        chosen_animal = st.selectbox("Select a species to learn more:", st.session_state.animal_list)
+        st.markdown("---")
+        st.subheader(f"Top 10 Endangered {st.session_state.chosen_class} in the {st.session_state.chosen_region}")
+        chosen_animal = st.selectbox("Select a specific animal to study:", st.session_state.animal_list)
         
-        if st.button("Research This Species"):
+        if st.button("Learn About This Species"):
             st.session_state.selected_animal_name = chosen_animal
             set_stage('loading_profile')
             st.rerun()
 
-# --- STAGE 2: Generate & Show Animal Details ---
+# --- STAGE 2: Generate Animal Profile ---
 elif st.session_state.stage == 'loading_profile':
-    with st.spinner(f"AI is compiling data on the {st.session_state.selected_animal_name}..."):
-        # We ask the AI to output strictly in JSON so we can format it perfectly in Streamlit
+    with st.spinner(f"AI is compiling research on the {st.session_state.selected_animal_name}..."):
         prompt = f"""
         Act as a wildlife biologist. Provide information on the endangered {st.session_state.selected_animal_name} in the United States.
-        You MUST return the data in strict JSON format with exactly these keys:
-        "description": "A brief physical description.",
-        "history": "A brief history of the species.",
-        "survival_data": "Important data about how it survives (diet, territory, etc).",
-        "endangerment_reasons": "Why and how it became endangered.",
-        "habitat": "Specific locations where its habitat is.",
-        "issues": ["Issue 1", "Issue 2", "Issue 3"] (An array of exactly 3 pressing concerns for survival)
-        
-        Do not use markdown blocks, just return the raw JSON.
+        Return the data in STRICT JSON format (no markdown blocks, just the raw JSON) with exactly these keys:
+        "description": "Short and detailed physical description.",
+        "history": "Brief history of the species.",
+        "survival_data": "Important data about how it survives.",
+        "endangerment_reasons": "Details on why and how it became endangered.",
+        "habitat": "Where its specific habitat is located within its region.",
+        "issues": ["Issue 1", "Issue 2", "Issue 3"] (An array of exactly the 3 most pressing concerns for survival)
         """
-        
         try:
             response = model.generate_content(prompt)
-            # Clean the response in case the AI wraps it in markdown code blocks
             clean_json = response.text.replace("```json", "").replace("```", "").strip()
             st.session_state.animal_profile = json.loads(clean_json)
             set_stage('details')
@@ -107,25 +149,25 @@ elif st.session_state.stage == 'loading_profile':
                 set_stage('selection')
                 st.rerun()
 
+# --- STAGE 3: Show Profile ---
 elif st.session_state.stage == 'details':
     profile = st.session_state.animal_profile
     
     st.header(st.session_state.selected_animal_name)
-    
     st.markdown(f"**Description:** {profile.get('description', 'N/A')}")
     st.markdown(f"**Brief History:** {profile.get('history', 'N/A')}")
     st.markdown(f"**Survival Data:** {profile.get('survival_data', 'N/A')}")
-    st.markdown(f"**Why they are endangered:** {profile.get('endangerment_reasons', 'N/A')}")
+    st.markdown(f"**Endangerment Details:** {profile.get('endangerment_reasons', 'N/A')}")
     st.markdown(f"**Specific Habitat:** {profile.get('habitat', 'N/A')}")
     
-    st.error("**Top 3 Pressing Concerns:**")
+    st.error("**The 3 Most Pressing Concerns:**")
     for i, issue in enumerate(profile.get('issues', []), 1):
         st.write(f"{i}. {issue}")
     
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Back to List"):
+        if st.button("← Back to Map & List"):
             set_stage('selection')
             st.rerun()
     with col2:
@@ -133,55 +175,53 @@ elif st.session_state.stage == 'details':
             set_stage('action')
             st.rerun()
 
-# --- STAGE 3: AI Brainstorming ---
+# --- STAGE 4: AI Chatbot & Solution Brainstorming ---
 elif st.session_state.stage == 'action':
     profile = st.session_state.animal_profile
     animal_name = st.session_state.selected_animal_name
     
-    st.header("Take Action")
-    st.write(f"Focusing on the **{animal_name}**, please select one of the pressing issues below that you'd like to help solve:")
+    st.header("Help Aid Survival")
+    st.write(f"Focusing on the **{animal_name}**, please select one of the 3 main issues to focus on:")
     
     chosen_issue = st.radio("Select an issue:", profile.get('issues', []))
     
+    st.markdown("### AI Conservation Chatbot")
     user_idea = st.text_area(
         "What is something that can be done in order to help solve this species' issue?", 
-        placeholder="Type your creative solution here..."
+        placeholder="Type your idea here..."
     )
     
-    if st.button("Submit Idea"):
+    if st.button("Submit Idea to AI"):
         if not user_idea:
-            st.warning("Please enter an idea first!")
+            st.warning("Please enter your idea first.")
         else:
-            with st.spinner("The AI is reviewing your conservation strategy..."):
+            with st.spinner("The AI is analyzing your approach..."):
                 prompt = f"""
-                You are a wildlife conservation expert. 
+                You are an AI wildlife conservation chatbot. 
                 Animal: {animal_name}
                 Issue: {chosen_issue}
                 User's Idea: {user_idea}
                 
-                Please evaluate the user's idea based on these criteria:
-                1. Point out any major flaws or logistical challenges in their idea.
-                2. Suggest a realistic, practical approach to carrying out their idea.
-                3. Tell the user what the absolute first step is to help make their idea a reality.
-                
-                Keep the response encouraging, structured, and under 300 words.
+                Respond directly to the user addressing these three specific points:
+                1. Point out any major flaws in their idea.
+                2. Provide a realistic approach to carrying out their idea.
+                3. State what the first step is in how the user can help make their idea a reality or help towards the cause.
                 """
-                
                 response = model.generate_content(prompt)
-                st.success("Analysis Complete!")
-                st.markdown("### Expert Feedback:")
+                
+                st.info("### AI Feedback")
                 st.write(response.text)
                 
                 st.markdown("---")
-                st.markdown("### **Your concern for wildlife well-being is appreciated!**")
-                st.write("Here are some organizations where you can continue to help:")
+                st.success("### Your concern for wildlife well-being is appreciated!")
+                st.write("Learn more and support the cause by visiting these organizations:")
                 st.markdown("""
-                * [World Wildlife Fund (WWF)](https://www.worldwildlife.org/)
-                * [National Wildlife Federation](https://www.nwf.org/)
-                * [Center for Biological Diversity](https://www.biologicaldiversity.org/)
+                1. [World Wildlife Fund (WWF)](https://www.worldwildlife.org/)
+                2. [National Wildlife Federation (NWF)](https://www.nwf.org/)
+                3. [Center for Biological Diversity](https://www.biologicaldiversity.org/)
                 """)
             
     st.markdown("---")
-    if st.button("← Back to Species Details"):
+    if st.button("← Back to Animal Info"):
         set_stage('details')
         st.rerun()
