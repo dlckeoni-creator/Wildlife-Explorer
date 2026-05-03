@@ -6,7 +6,7 @@ import json
 # 1. API Configuration
 # ==========================================
 # Replace with your actual key or use st.secrets["API_KEY"] if deploying to Streamlit Cloud
-API_KEY = "YOUR_API_KEY" 
+API_KEY = "AIzaSyD73w8UN8RVNIPwTkqnRQfKNN37kDHJT7g" 
 
 if API_KEY != "YOUR_API_KEY":
     genai.configure(api_key=API_KEY)
