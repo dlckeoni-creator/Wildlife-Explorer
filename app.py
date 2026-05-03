@@ -116,4 +116,48 @@ elif st.session_state.stage == 'loading_profile':
 elif st.session_state.stage == 'details':
     p = st.session_state.animal_profile
     st.header(st.session_state.selected_animal_name)
-    st.write(f"**Description:** {
+    st.write(f"**Description:** {p['description']}")
+    st.write(f"**History:** {p['history']}")
+    st.write(f"**Habitat:** {p['habitat']}")
+    st.write(f"**Survival Skills:** {p['survival_data']}")
+    st.write(f"**Threats:** {p['endangerment_reasons']}")
+    
+    st.error("### ⚠️ Main Survival Issues")
+    for i, issue in enumerate(p['issues'], 1):
+        st.write(f"{i}. {issue}")
+    
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("← Back"):
+            set_stage('selection')
+            st.rerun()
+    with c2:
+        if st.button("Start Action Plan →"):
+            set_stage('action')
+            st.rerun()
+
+# --- STAGE 4: Action Plan & AI Feedback ---
+elif st.session_state.stage == 'action':
+    p = st.session_state.animal_profile
+    st.header("Action Plan")
+    issue = st.radio("Choose an issue to solve:", p['issues'])
+    
+    # Corrected text_area line
+    user_idea = st.text_area("What can be done to help solve this issue?", placeholder="Type your idea...")
+    
+    if st.button("Submit Idea"):
+        if user_idea:
+            with st.spinner("Analyzing..."):
+                prompt = f"Animal: {st.session_state.selected_animal_name}. Issue: {issue}. Idea: {user_idea}. 1. Flaws. 2. Realistic approach. 3. First step for user."
+                response = client.chat.completions.create(model=AI_MODEL, messages=[{"role": "user", "content": prompt}])
+                st.info("### AI Feedback")
+                st.write(response.choices[0].message.content)
+                st.success("Your concern for wildlife well-being is appreciated!")
+                st.markdown("- [WWF](https://www.worldwildlife.org/)\n- [NWF](https://www.nwf.org/)\n- [Center for Biological Diversity](https://www.biologicaldiversity.org/)")
+        else:
+            st.warning("Please enter an idea.")
+    
+    if st.button("← Back to Details"):
+        set_stage('details')
+        st.rerun()
