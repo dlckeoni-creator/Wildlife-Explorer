@@ -92,13 +92,20 @@ if st.session_state.stage == 'selection':
             set_stage('loading_profile')
             st.rerun()
 
-# --- STAGE 2: Profile Load ---
+# --- STAGE 2: Profile Load (Now with separated Population) ---
 elif st.session_state.stage == 'loading_profile':
     with st.spinner(f"Fetching data for {st.session_state.selected_animal_name}..."):
-        # UPDATED PROMPT: Added instruction to return only plain strings for data
+        # UPDATED PROMPT: Explicitly separating survival_skills and population
         prompt = f"""Return ONLY raw JSON for the endangered {st.session_state.selected_animal_name} in the US.
-        All values must be simple descriptive string sentences. 
-        Keys: 'description', 'history', 'survival_data', 'endangerment_reasons', 'habitat', 'issues' (list of 3 strings)."""
+        All values must be simple strings. 
+        Keys: 
+        'description': 'physical description', 
+        'history': 'brief history', 
+        'survival_skills': 'biological traits/diet/behavior', 
+        'population': 'current estimated numbers and trends', 
+        'endangerment_reasons': 'why it is endangered', 
+        'habitat': 'where it lives', 
+        'issues': ['Issue 1', 'Issue 2', 'Issue 3']"""
         try:
             response = client.chat.completions.create(
                 model=AI_MODEL,
@@ -119,7 +126,6 @@ elif st.session_state.stage == 'details':
     p = st.session_state.animal_profile
     st.header(st.session_state.selected_animal_name)
     
-    # NEW CLEANUP LOGIC: Checks if the AI sent a dictionary and converts it to clean text
     def clean_text(data):
         if isinstance(data, dict):
             return ", ".join([f"{k.replace('_', ' ').title()}: {v}" for k, v in data.items()])
@@ -128,7 +134,8 @@ elif st.session_state.stage == 'details':
     st.write(f"**Description:** {clean_text(p['description'])}")
     st.write(f"**History:** {clean_text(p['history'])}")
     st.write(f"**Habitat:** {clean_text(p['habitat'])}")
-    st.write(f"**Survival Skills:** {clean_text(p['survival_data'])}")
+    st.write(f"**Survival Skills:** {clean_text(p['survival_skills'])}")
+    st.write(f"**Population Status:** {clean_text(p['population'])}") # NEW SECTION
     st.write(f"**Threats:** {clean_text(p['endangerment_reasons'])}")
     
     st.error("### ⚠️ Main Survival Issues")
