@@ -1,6 +1,11 @@
 import streamlit as st
 import google.generativeai as genai
 
+# Pull the API key securely from Streamlit's secrets
+API_KEY = st.secrets["API_KEY"]
+genai.configure(api_key=API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
+
 # ==========================================
 # 1. API Configuration & Setup
 # ==========================================
