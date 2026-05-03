@@ -1,77 +1,38 @@
 import streamlit as st
 import google.generativeai as genai
-
-# Pull the API key securely from Streamlit's secrets
-API_KEY = st.secrets["API_KEY"]
-genai.configure(api_key=API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+import json
 
 # ==========================================
-# 1. API Configuration & Setup
+# 1. API Configuration
 # ==========================================
-# Replace 'YOUR_API_KEY' with your actual Google Gemini API key
-# Or set it as an environment variable for better security.
+# Replace with your actual key or use st.secrets["API_KEY"] if deploying to Streamlit Cloud
 API_KEY = "YOUR_API_KEY" 
+
 if API_KEY != "YOUR_API_KEY":
     genai.configure(api_key=API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Using flash for fast, dynamic generation
+    model = genai.GenerativeModel('gemini-1.5-flash') 
 else:
     model = None
 
 # ==========================================
-# 2. Database (Sample Data)
+# 2. Session State Management
 # ==========================================
-# To keep the code manageable, here is the structure using one example.
-# You will expand this dictionary with the other 239 animals.
-wildlife_data = {
-    "West": {
-        "Mammals": {
-            "Gray Wolf": {
-                "description": "The largest extant member of the canine family, known for their pack hunting.",
-                "history": "Once roaming most of North America, their populations were decimated by the mid-20th century due to hunting and habitat loss.",
-                "survival_data": "Packs require large territories (up to 1,000 square miles) and rely heavily on elk, deer, and moose.",
-                "endangerment_reasons": "Human-wildlife conflict, habitat fragmentation, and loss of legal protections in certain states.",
-                "habitat": "Forests, inland scrub, and mountainous regions in states like Idaho, Wyoming, and Washington.",
-                "issues": [
-                    "Conflict with local ranchers and livestock.",
-                    "Habitat fragmentation blocking migration routes.",
-                    "Poaching and illegal hunting."
-                ]
-            },
-            "Sierra Nevada Bighorn Sheep": {
-                "description": "A distinct subspecies of bighorn sheep known for their large, curled horns.",
-                "history": "Population dropped to around 100 individuals in the 1990s due to diseases introduced by domestic sheep.",
-                "survival_data": "They inhabit steep, rocky terrain to escape predators and forage on alpine vegetation.",
-                "endangerment_reasons": "Disease transmission (pneumonia) from domestic sheep, mountain lion predation, and harsh winters.",
-                "habitat": "The high peaks and eastern slopes of the Sierra Nevada mountains in California.",
-                "issues": [
-                    "Spread of fatal pneumonia from domestic sheep grazing nearby.",
-                    "Predation by mountain lions on vulnerable, small herds.",
-                    "Loss of foraging habitat due to climate change."
-                ]
-            }
-        }
-    }
-}
-
-regions = ["West", "South", "Mid-west", "Northeast"]
-classes = ["Mammals", "Birds", "Reptiles", "Amphibians", "Fish", "Invertebrates"]
-
-# ==========================================
-# 3. Session State Management
-# ==========================================
-# Streamlit re-runs from top to bottom on every interaction. 
-# We use session_state to remember where the user is in the flow.
+# This prevents the app from forgetting data when the user clicks a button
 if 'stage' not in st.session_state:
     st.session_state.stage = 'selection'
-if 'selected_animal' not in st.session_state:
-    st.session_state.selected_animal = None
+if 'animal_list' not in st.session_state:
+    st.session_state.animal_list = []
+if 'selected_animal_name' not in st.session_state:
+    st.session_state.selected_animal_name = None
+if 'animal_profile' not in st.session_state:
+    st.session_state.animal_profile = None
 
 def set_stage(stage):
     st.session_state.stage = stage
 
 # ==========================================
-# 4. App UI & Logic
+# 3. App UI & Logic
 # ==========================================
 st.set_page_config(page_title="Wildlife Conservation Explorer", page_icon="🐾", layout="centered")
 
@@ -79,62 +40,108 @@ st.title("🐾 Wildlife Conservation Explorer")
 st.write("Discover endangered species across the United States and brainstorm ways to secure their future.")
 st.markdown("---")
 
-# --- STAGE 1: Selection ---
+# Stop the app if API key is missing
+if model is None:
+    st.error("⚠️ Please add your Gemini API key at the top of the app.py code to activate the AI.")
+    st.stop()
+
+# --- STAGE 1: Selection & List Generation ---
 if st.session_state.stage == 'selection':
+    regions = ["West", "South", "Mid-west", "Northeast"]
+    classes = ["Mammals", "Birds", "Reptiles", "Amphibians", "Fish", "Invertebrates"]
+
     col1, col2 = st.columns(2)
     with col1:
         selected_class = st.selectbox("1. Choose an Animal Class:", classes)
     with col2:
-        selected_region = st.selectbox("2. Choose a Region:", regions)
+        selected_region = st.selectbox("2. Choose a US Region:", regions)
 
-    st.subheader(f"Endangered {selected_class} in the {selected_region}")
-    
-    # Check if we have data for this combination
-    if selected_region in wildlife_data and selected_class in wildlife_data[selected_region]:
-        animals = list(wildlife_data[selected_region][selected_class].keys())
-        chosen_animal = st.selectbox("Select a species to learn more:", animals)
+    if st.button("Generate Top 10 Endangered List"):
+        with st.spinner("AI is researching the region..."):
+            # Prompting the AI to return a clean, comma-separated list
+            prompt = f"List the top 10 most threatened or endangered {selected_class} in the {selected_region}ern United States. Return ONLY a comma-separated list of their common names, nothing else."
+            response = model.generate_content(prompt)
+            
+            # Clean up the AI output into a Python list
+            clean_list = [name.strip() for name in response.text.split(",") if name.strip()]
+            st.session_state.animal_list = clean_list
+            st.success("List generated!")
+
+    # If the list has been generated, show the next dropdown
+    if st.session_state.animal_list:
+        st.subheader(f"Endangered {selected_class} in the {selected_region}")
+        chosen_animal = st.selectbox("Select a species to learn more:", st.session_state.animal_list)
         
-        if st.button("Explore Species"):
-            st.session_state.selected_animal = wildlife_data[selected_region][selected_class][chosen_animal]
+        if st.button("Research This Species"):
             st.session_state.selected_animal_name = chosen_animal
-            set_stage('details')
-    else:
-        st.info("Data for this specific region and class is currently being updated. Please try West -> Mammals for a live demo!")
+            set_stage('loading_profile')
+            st.rerun()
 
-# --- STAGE 2: Animal Details ---
+# --- STAGE 2: Generate & Show Animal Details ---
+elif st.session_state.stage == 'loading_profile':
+    with st.spinner(f"AI is compiling data on the {st.session_state.selected_animal_name}..."):
+        # We ask the AI to output strictly in JSON so we can format it perfectly in Streamlit
+        prompt = f"""
+        Act as a wildlife biologist. Provide information on the endangered {st.session_state.selected_animal_name} in the United States.
+        You MUST return the data in strict JSON format with exactly these keys:
+        "description": "A brief physical description.",
+        "history": "A brief history of the species.",
+        "survival_data": "Important data about how it survives (diet, territory, etc).",
+        "endangerment_reasons": "Why and how it became endangered.",
+        "habitat": "Specific locations where its habitat is.",
+        "issues": ["Issue 1", "Issue 2", "Issue 3"] (An array of exactly 3 pressing concerns for survival)
+        
+        Do not use markdown blocks, just return the raw JSON.
+        """
+        
+        try:
+            response = model.generate_content(prompt)
+            # Clean the response in case the AI wraps it in markdown code blocks
+            clean_json = response.text.replace("```json", "").replace("```", "").strip()
+            st.session_state.animal_profile = json.loads(clean_json)
+            set_stage('details')
+            st.rerun()
+        except Exception as e:
+            st.error("The AI had trouble formatting the data. Please try again.")
+            if st.button("← Back"):
+                set_stage('selection')
+                st.rerun()
+
 elif st.session_state.stage == 'details':
-    animal = st.session_state.selected_animal
+    profile = st.session_state.animal_profile
     
     st.header(st.session_state.selected_animal_name)
     
-    st.markdown(f"**Description:** {animal['description']}")
-    st.markdown(f"**Brief History:** {animal['history']}")
-    st.markdown(f"**Survival Data:** {animal['survival_data']}")
-    st.markdown(f"**Why they are endangered:** {animal['endangerment_reasons']}")
-    st.markdown(f"**Specific Habitat:** {animal['habitat']}")
+    st.markdown(f"**Description:** {profile.get('description', 'N/A')}")
+    st.markdown(f"**Brief History:** {profile.get('history', 'N/A')}")
+    st.markdown(f"**Survival Data:** {profile.get('survival_data', 'N/A')}")
+    st.markdown(f"**Why they are endangered:** {profile.get('endangerment_reasons', 'N/A')}")
+    st.markdown(f"**Specific Habitat:** {profile.get('habitat', 'N/A')}")
     
     st.error("**Top 3 Pressing Concerns:**")
-    for i, issue in enumerate(animal['issues'], 1):
+    for i, issue in enumerate(profile.get('issues', []), 1):
         st.write(f"{i}. {issue}")
     
     st.markdown("---")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("← Back to Selection"):
+        if st.button("← Back to List"):
             set_stage('selection')
+            st.rerun()
     with col2:
         if st.button("Continue to Action Plan →"):
             set_stage('action')
+            st.rerun()
 
 # --- STAGE 3: AI Brainstorming ---
 elif st.session_state.stage == 'action':
-    animal = st.session_state.selected_animal
+    profile = st.session_state.animal_profile
     animal_name = st.session_state.selected_animal_name
     
     st.header("Take Action")
     st.write(f"Focusing on the **{animal_name}**, please select one of the pressing issues below that you'd like to help solve:")
     
-    chosen_issue = st.radio("Select an issue:", animal['issues'])
+    chosen_issue = st.radio("Select an issue:", profile.get('issues', []))
     
     user_idea = st.text_area(
         "What is something that can be done in order to help solve this species' issue?", 
@@ -144,8 +151,6 @@ elif st.session_state.stage == 'action':
     if st.button("Submit Idea"):
         if not user_idea:
             st.warning("Please enter an idea first!")
-        elif model is None:
-            st.error("Please add your Gemini API key at the top of the code to enable the AI.")
         else:
             with st.spinner("The AI is reviewing your conservation strategy..."):
                 prompt = f"""
@@ -162,24 +167,21 @@ elif st.session_state.stage == 'action':
                 Keep the response encouraging, structured, and under 300 words.
                 """
                 
-                try:
-                    response = model.generate_content(prompt)
-                    st.success("Analysis Complete!")
-                    st.markdown("### Expert Feedback:")
-                    st.write(response.text)
-                    
-                    st.markdown("---")
-                    st.markdown("### **Your concern for wildlife well-being is appreciated!**")
-                    st.write("Here are some organizations where you can continue to help:")
-                    st.markdown("""
-                    * [World Wildlife Fund (WWF)](https://www.worldwildlife.org/)
-                    * [National Wildlife Federation](https://www.nwf.org/)
-                    * [Center for Biological Diversity](https://www.biologicaldiversity.org/)
-                    """)
-                    
-                except Exception as e:
-                    st.error(f"An error occurred with the AI: {e}")
+                response = model.generate_content(prompt)
+                st.success("Analysis Complete!")
+                st.markdown("### Expert Feedback:")
+                st.write(response.text)
+                
+                st.markdown("---")
+                st.markdown("### **Your concern for wildlife well-being is appreciated!**")
+                st.write("Here are some organizations where you can continue to help:")
+                st.markdown("""
+                * [World Wildlife Fund (WWF)](https://www.worldwildlife.org/)
+                * [National Wildlife Federation](https://www.nwf.org/)
+                * [Center for Biological Diversity](https://www.biologicaldiversity.org/)
+                """)
             
     st.markdown("---")
     if st.button("← Back to Species Details"):
         set_stage('details')
+        st.rerun()
