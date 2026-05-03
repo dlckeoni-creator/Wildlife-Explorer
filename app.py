@@ -8,9 +8,9 @@ import plotly.express as px
 # 1. API Configuration
 # ==========================================
 # Replace with your actual key (Keep this secure!)
-API_KEY = "YOUR_API_KEY" 
+API_KEY = "AIzaSyDWwWnJrk3-Jc0fubRsXWD9Vh_dHoWw6ZM" 
 
-if API_KEY != "YOUR_API_KEY":
+if API_KEY != "AIzaSyDWwWnJrk3-Jc0fubRsXWD9Vh_dHoWw6ZM":
     genai.configure(api_key=API_KEY)
     # Using 1.5-flash as the standard fast model
     model = genai.GenerativeModel('models/gemini-1.5-flash') 
