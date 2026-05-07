@@ -8,7 +8,7 @@ import plotly.express as px
 # 1. API Configuration
 # ==========================================
 try:
-    client = Groq(api_key=st.secrets["GROQ_API_KEY"])
+    client = Groq(api_key=st.secrets[])
     AI_MODEL = "llama-3.3-70b-versatile" 
 except Exception:
     client = None
